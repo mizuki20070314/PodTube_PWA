@@ -241,7 +241,10 @@ class Browser:
 def emulate(b, width, height, mobile=True, scale=2.0, touch=True):
     """Phone-like viewport (CSS pixels) with touch events."""
     b.call("Emulation.setDeviceMetricsOverride", width=width, height=height, deviceScaleFactor=scale, mobile=mobile)
-    b.call("Emulation.setTouchEmulationEnabled", enabled=touch, maxTouchPoints=5 if touch else 0)
+    if touch:
+        b.call("Emulation.setTouchEmulationEnabled", enabled=True, maxTouchPoints=5)
+    else:
+        b.call("Emulation.setTouchEmulationEnabled", enabled=False)
 
 
 def touch(b, kind, x, y):

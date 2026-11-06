@@ -77,6 +77,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         with open(full, "rb") as f:
             data = f.read()
+        if rel == "css/app.css":
+            sys.path.insert(0, os.path.join(ROOT, "build"))
+            import cssfix
+            data = cssfix.fix(data.decode("utf-8")).encode("utf-8")
         if rel == "sw.js":
             data = data.replace(b"__VERSION__", b"dev").replace(b"__PRECACHE__", b"[]")
         ctype = mimetypes.guess_type(full)[0] or "application/octet-stream"

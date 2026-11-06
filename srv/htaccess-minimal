@@ -1,0 +1,3 @@
+# PodTube PWA - minimal fallback (used when the full .htaccess is refused by the server)
+Options -Indexes
+DirectoryIndex index.html

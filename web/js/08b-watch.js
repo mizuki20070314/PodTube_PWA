@@ -270,6 +270,12 @@
       this.io = new IntersectionObserver(function (es) { if (es[0].isIntersecting && self.continuation) self.fetch(self.continuation); },
         { root: null, rootMargin: '400px 0px' });
       this.io.observe(this.sentinel);
+    } else {
+      // iOS 12.0 / 12.1 have no IntersectionObserver: watch the scroll position instead
+      this.scroller.addEventListener('scroll', PT.debounce(function () {
+        var s = self.scroller;
+        if (self.continuation && s.scrollHeight - s.scrollTop - s.clientHeight < 600) self.fetch(self.continuation);
+      }, 100));
     }
     if (firstPage && firstPage.comments && firstPage.comments.length) {
       this.add(firstPage.comments);

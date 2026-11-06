@@ -8,3 +8,4 @@ tests/shots/
 tests/work/
 node_modules/
 *.secret
+.dev-server.*

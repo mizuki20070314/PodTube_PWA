@@ -13,7 +13,7 @@ var DEV = VERSION === 'dev';                               // the local dev serv
 
 self.addEventListener('install', function (event) {
   event.waitUntil(caches.open(SHELL).then(function (cache) {
-    return Promise.all(PRECACHE.map(function (u) { return cache.add(new Request(u, { cache: 'reload' })).catch(function () { /* best effort */ }); });
+    return Promise.all(PRECACHE.map(function (u) { return cache.add(new Request(u, { cache: 'reload' })).catch(function () { /* best effort */ }); }));
   }).then(function () { return self.skipWaiting(); }));
 });
 
