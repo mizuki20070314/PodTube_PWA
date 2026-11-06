@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>PodTube</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f0f0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="PodTube">
+<meta name="format-detection" content="telephone=no">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<!-- BUNDLE-CSS -->
+<link rel="stylesheet" href="css/app.css">
+<!-- /BUNDLE-CSS -->
+<script>
+/* hls.js is only for browsers that have no native HLS (Chrome, Edge, Firefox ...): Apple's browsers play HLS themselves. */
+(function () {
+  var ua = navigator.userAgent;
+  var apple = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) || /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(ua);
+  if (!apple && (window.MediaSource || window.WebKitMediaSource)) document.write('<script src="vendor/hls.min.js"><\/script>');
+})();
+</script>
+</head>
+<body>
+<div id="app">
+  <div id="tabs"></div>
+  <nav id="tabbar" aria-label="tabs"></nav>
+</div>
+<div id="boot" style="position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:#0f0f0f;z-index:1000"><div style="width:28px;height:28px;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite"></div></div>
+<noscript><p style="padding:24px;color:#fff">PodTube needs JavaScript.</p></noscript>
+<!-- BUNDLE-JS -->
+<script src="js/00-core.js"></script>
+<script src="js/01-icons.js"></script>
+<script src="js/02-i18n.js"></script>
+<script src="js/02b-i18n-extra.js"></script>
+<script src="js/03-store.js"></script>
+<script src="js/04-api.js"></script>
+<script src="js/05-ui.js"></script>
+<script src="js/06-nav.js"></script>
+<script src="js/07-player.js"></script>
+<script src="js/08a-controls.js"></script>
+<script src="js/08b-watch.js"></script>
+<script src="js/09a-screens.js"></script>
+<script src="js/09b-screens.js"></script>
+<script src="js/10-shorts.js"></script>
+<script src="js/11-downloads.js"></script>
+<script src="js/12-boot.js"></script>
+<!-- /BUNDLE-JS -->
+</body>
+</html>

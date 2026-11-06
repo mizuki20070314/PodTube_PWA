@@ -77,6 +77,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         with open(full, "rb") as f:
             data = f.read()
+        if rel == "sw.js":
+            data = data.replace(b"__VERSION__", b"dev").replace(b"__PRECACHE__", b"[]")
         ctype = mimetypes.guess_type(full)[0] or "application/octet-stream"
         self.send_response(200)
         self.send_header("Content-Type", ctype)

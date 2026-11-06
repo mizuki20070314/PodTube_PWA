@@ -177,7 +177,7 @@ def upstream_master(sess, sid):
 def variant_height(attrs):
     res = attr(attrs, "RESOLUTION") or ""
     m = re.match(r"(\d+)x(\d+)", res)
-    return int(m.group(2)) if m else 0
+    return min(int(m.group(1)), int(m.group(2))) if m else 0         # a portrait 720x1280 is "720p" too
 
 
 def _primary(tag):

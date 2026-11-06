@@ -394,6 +394,7 @@ def r_diag(req, it):
                 return "%d variants" % n
             step("HLS manifest (relay)", manifest)
             sid = hls.new_session(info)
+            holder["sid"] = sid
 
             def segment():
                 sess = hls.load(sid)
@@ -406,7 +407,7 @@ def r_diag(req, it):
             step("HLS segment (relay)", segment)
     if req.token:
         step("account history tracking", lambda: "uga=%s" % ("uga=" in account.playback_tracking(it, req.token, "dQw4w9WgXcQ")["playbackURL"]))
-    return {"lines": lines, "visitor": it.visitor, "hl": it.hl, "gl": it.gl, "version": VERSION}
+    return {"lines": lines, "sid": holder.get("sid"), "visitor": it.visitor, "hl": it.hl, "gl": it.gl, "version": VERSION}
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -540,8 +541,11 @@ def serve_hls(req, out):
     ua = sess["ua"]
     try:
         if rest == "master.m3u8":
+            qhl = req.query.get("hl", "")
+            if not re.match(r"^[a-z]{2,3}(-[A-Za-z]{2,4})?$", qhl):      # a <video> element cannot send the X-PT-Hl header
+                qhl = req.lang()[0]
             text = hls.build_master(sess, sid, base, maxh=int_param(req, "maxh"), audio_pref=req.query.get("audio", ""),
-                                    hl=req.lang()[0])
+                                    hl=qhl)
             respond(out, req, 200, "application/vnd.apple.mpegurl", text)
             return
         mm = re.match(r"^([va])/(\d+)\.m3u8$", rest)
