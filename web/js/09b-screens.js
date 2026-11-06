@@ -229,6 +229,12 @@
           { toggle: PT.t('settings.autoplay'), get: function () { return set.autoplay; }, set: function (v) { set.autoplay = v; PT.emit('autoplay'); } },
           { toggle: PT.t('settings.backgroundPlay'), get: function () { return set.backgroundPlay; }, set: function (v) { set.backgroundPlay = v; } },
           { toggle: PT.t('settings.captionsAlways'), get: function () { return set.captionsAlways; }, set: function (v) { set.captionsAlways = v; } },
+          PT.watch && PT.watch.hasFullscreenChoice() ? { choice: PT.t('settings.fullscreen'), value: set.iosFullscreen === 'app' ? PT.t('settings.fullscreenAppShort') : PT.t('settings.fullscreenOSShort'), action: function () {
+            PT.sheet.show({ title: PT.t('settings.fullscreen'), actions: [
+              { title: PT.t('settings.fullscreenOS'), checked: set.iosFullscreen !== 'app', handler: function () { set.iosFullscreen = 'native'; render(); } },
+              { title: PT.t('settings.fullscreenApp'), checked: set.iosFullscreen === 'app', handler: function () { set.iosFullscreen = 'app'; render(); } }] });
+          } } : null,
+          PT.watch && PT.watch.hasFullscreenChoice() ? { note: PT.t('settings.fullscreenHint') } : null,
           { choice: PT.t('settings.defaultQuality'), value: qualityText(set.maxQuality), action: function () {
             PT.sheet.show({ title: PT.t('settings.defaultQuality'), actions: [0, 1080, 720, 480, 360, 240, 144].map(function (x) {
               return { title: qualityText(x), checked: x === set.maxQuality, handler: function () { set.maxQuality = x; PT.player.setMaxHeight(x); render(); } };
@@ -239,7 +245,7 @@
               return { title: x === 1 ? PT.t('player.normal') : x + 'x', checked: x === set.playbackSpeed, handler: function () { set.playbackSpeed = x; PT.player.setSpeed(x); render(); } };
             }) });
           } }
-        ] },
+        ].filter(Boolean) },
         { title: PT.t('settings.privacy'), rows: [
           { toggle: PT.t('settings.pauseHistory'), get: function () { return set.pauseHistory; }, set: function (v) { set.pauseHistory = v; } },
           { button: PT.t('settings.clearHistory'), destructive: true, action: function () {
@@ -455,7 +461,12 @@
       var video = document.createElement('video');
       append('-- this browser');
       append('   engine: ' + (window.Hls && window.Hls.isSupported() && !PT.isApple ? 'hls.js (MSE)' : (video.canPlayType('application/vnd.apple.mpegurl') ? 'native HLS' : 'none')));
-      append('   Picture in Picture: ' + (PT.player.pip.supported ? 'the browser offers it' : 'the browser does not offer it'));
+      var pst = PT.player.pip.state;
+      append('   Picture in Picture: ' + (pst === 'ready' ? 'the browser offers it' : pst === 'blocked'
+        ? 'refused for this video' + (PT.isIOS && PT.standalone ? ' (iOS does not allow it in Home Screen apps: WebKit bug 303885; it works in Safari)' : '')
+        : 'the browser does not offer it'));
+      append('      ' + PT.player.pip.info());
+      append('   Fullscreen: ' + PT.watch.fullscreenInfo());
       append('   AirPlay: ' + (PT.player.airplay.supported ? 'supported' : 'not supported'));
       append('   service worker: ' + (navigator.serviceWorker ? 'yes' : 'no') + ', Cache Storage: ' + (window.caches ? 'yes' : 'no') + ', standalone: ' + PT.standalone);
       if (navigator.storage && navigator.storage.estimate) {

@@ -13,6 +13,7 @@
     captionsAlways: false,
     maxQuality: 0,            // 0 = automatic, else the maximum height in pixels
     playbackSpeed: 1,
+    iosFullscreen: 'native',  // iOS without an element fullscreen: 'native' = the OS video player (real fullscreen), 'app' = fill the window
     preferredAudio: '',       // '' automatic, 'original', or a language tag
     uiLanguage: 'auto',       // 'auto' | 'ja' | 'en'
     contentRegion: ''         // '' = decided from the language of the browser

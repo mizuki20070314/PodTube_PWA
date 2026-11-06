@@ -760,31 +760,137 @@
   // ---------------------------------------------------------------------------------------------------------------
   // Picture in Picture / AirPlay
   // ---------------------------------------------------------------------------------------------------------------
+  /** Whether WebKit's own answer (webkitSupportsPresentationMode) can be trusted yet: it needs a loaded video. */
+  function webkitPipKnown() {
+    return typeof video.webkitSupportsPresentationMode === 'function' && video.readyState >= 1 && video.videoWidth > 0;
+  }
+  function webkitPipOk() {
+    try { return !!video.webkitSupportsPresentationMode('picture-in-picture'); } catch (e) { return false; }
+  }
   var pip = P.pip = {
-    get supported() {
-      return !!((document.pictureInPictureEnabled && video.requestPictureInPicture) ||
-        (video.webkitSupportsPresentationMode && video.webkitSupportsPresentationMode('picture-in-picture')));
+    /**
+     * 'ready'   the browser offers Picture in Picture;
+     * 'blocked' the page-level flag says yes but WebKit says no for this video: iOS does that in Home Screen apps (WebKit bug 303885:
+     *           document.pictureInPictureEnabled is true there, video.webkitSupportsPresentationMode('picture-in-picture') is false,
+     *           and requestPictureInPicture() fails with NotSupportedError);
+     * 'none'    no Picture in Picture API at all (the button stays hidden, as in the original app).
+     */
+    get state() {
+      var standard = !!(document.pictureInPictureEnabled && video.requestPictureInPicture);
+      var hasLegacy = typeof video.webkitSupportsPresentationMode === 'function';
+      if (hasLegacy && webkitPipKnown()) return webkitPipOk() ? 'ready' : (standard ? 'blocked' : 'none');
+      if (standard) return 'ready';
+      return hasLegacy && webkitPipOk() ? 'ready' : 'none';        // an older WebKit: it answers once a video is loaded
     },
+    get supported() { return pip.state === 'ready'; },
     get active() {
       return !!(document.pictureInPictureElement === video || video.webkitPresentationMode === 'picture-in-picture');
     },
+    /** What the browser answers, for the diagnostics screen. */
+    info: function () {
+      var legacy = typeof video.webkitSupportsPresentationMode !== 'function' ? 'n/a' : (webkitPipKnown() ? (webkitPipOk() ? 'yes' : 'no') : 'unknown until a video is loaded');
+      return 'document.pictureInPictureEnabled=' + (document.pictureInPictureEnabled ? 'yes' : 'no') + ', webkitSupportsPresentationMode=' + legacy;
+    },
+    /** Tells why it did not work (iOS keeps Picture in Picture away from Home Screen apps: nothing the app can do about it). */
+    explain: function () {
+      PT.toast(PT.t(PT.isIOS && PT.standalone ? 'pip.homeScreen' : 'pip.failed'));
+    },
     toggle: function () {
-      try {
-        if (pip.active) {
+      if (pip.active) {
+        try {
           if (document.exitPictureInPicture && document.pictureInPictureElement) return document.exitPictureInPicture().catch(PT.noop);
           if (video.webkitSetPresentationMode) video.webkitSetPresentationMode('inline');
-        } else if (video.requestPictureInPicture && document.pictureInPictureEnabled) {
-          return video.requestPictureInPicture().catch(function () { PT.toast(PT.t('pip.failed')); });
-        } else if (video.webkitSetPresentationMode) {
-          video.webkitSetPresentationMode('picture-in-picture');
+        } catch (e) { PT.toast(PT.t('pip.failed')); }
+        return null;
+      }
+      var st = pip.state;
+      if (st === 'blocked' || st === 'none') { pip.explain(); return null; }
+      // the older WebKit call: some Safari versions only have this one, and it is the second try where the standard one is refused
+      function legacy() {
+        if (video.webkitSetPresentationMode && webkitPipOk()) { video.webkitSetPresentationMode('picture-in-picture'); return true; }
+        return false;
+      }
+      try {
+        if (video.requestPictureInPicture && document.pictureInPictureEnabled) {
+          return video.requestPictureInPicture().catch(function (e) {
+            try {
+              if (legacy()) { explainIfNothingHappens(); return; }
+            } catch (e2) { /* fall through */ }
+            pip.explain(e);
+          });
         }
-      } catch (e) { PT.toast(PT.t('pip.failed')); }
+        if (legacy()) explainIfNothingHappens();
+        else pip.explain();
+      } catch (e) { pip.explain(e); }
       return null;
     }
   };
-  video.addEventListener('enterpictureinpicture', function () { PT.emit('pip'); });
-  video.addEventListener('leavepictureinpicture', function () { PT.emit('pip'); });
-  video.addEventListener('webkitpresentationmodechanged', function () { PT.emit('pip'); });
+  // The WebKit call has no result: it accepts the request and, where iOS refuses, simply nothing happens.  So look again a moment later,
+  // and speak up only if PiP neither started nor came and went in between.
+  var pipEvents = 0;
+  function explainIfNothingHappens() {
+    var seen = pipEvents;
+    setTimeout(function () { if (!pip.active && pipEvents === seen) pip.explain(); }, 1500);
+  }
+  function pipChanged() { pipEvents++; PT.emit('pip'); }
+  video.addEventListener('enterpictureinpicture', pipChanged);
+  video.addEventListener('leavepictureinpicture', pipChanged);
+  video.addEventListener('webkitpresentationmodechanged', pipChanged);
+
+  // ---------------------------------------------------------------------------------------------------------------
+  // fullscreen of the <video> itself.  iPhone / iPod touch (and Home Screen apps on iPad) have no fullscreen for a web page:
+  // the only real fullscreen there is the OS video player, which takes over the <video> element with its own controls.
+  // ---------------------------------------------------------------------------------------------------------------
+  var capTrack = null, capCues = null;
+  /** The OS player shows only what the <video> itself knows, so the captions are mirrored into a TextTrack for it. */
+  function syncNativeCaptions() {
+    if (!(PT.isIOS && video.addTextTrack && window.VTTCue)) return;
+    try {
+      if (!capTrack) {
+        if (!Sub.isEnabled) return;                                    // no track until captions are wanted (it would show up empty in the OS menu)
+        capTrack = video.addTextTrack('captions', 'PodTube', 'und');
+        capTrack.mode = 'hidden';
+      }
+      if (capCues !== Sub.cues) {
+        capCues = Sub.cues;
+        var old = capTrack.cues;
+        if (old) for (var i = old.length - 1; i >= 0; i--) capTrack.removeCue(old[i]);
+        if (Sub.isEnabled) {
+          Sub.cues.forEach(function (c) {
+            capTrack.addCue(new window.VTTCue(c[0], c[1], String(c[2]).replace(/&/g, '&amp;').replace(/</g, '&lt;')));
+          });
+        }
+      }
+      setNativeCaptions(!!video.webkitDisplayingFullscreen);
+    } catch (e) { /* captions in the OS player are a bonus */ }
+  }
+  function setNativeCaptions(inFullscreen) {
+    if (!capTrack) return;
+    try { capTrack.mode = inFullscreen && Sub.isEnabled && Sub.cues.length ? 'showing' : 'hidden'; } catch (e) { /* ignore */ }
+  }
+  PT.on('subtitles', syncNativeCaptions);
+
+  var vfs = P.videoFullscreen = {
+    get supported() { return !!(PT.isIOS && typeof video.webkitEnterFullscreen === 'function' && video.webkitSupportsFullscreen); },
+    get active() { return !!video.webkitDisplayingFullscreen; },
+    /** Must run inside the tap of the fullscreen button (iOS refuses it otherwise).  Returns whether the OS player was asked for. */
+    enter: function () {
+      if (!vfs.supported) return false;
+      try {
+        syncNativeCaptions();
+        setNativeCaptions(true);
+        video.webkitEnterFullscreen();
+        return true;
+      } catch (e) { setNativeCaptions(false); return false; }
+    },
+    exit: function () { try { if (video.webkitExitFullscreen) video.webkitExitFullscreen(); } catch (e) { /* ignore */ } },
+    info: function () {
+      return 'webkitEnterFullscreen=' + (typeof video.webkitEnterFullscreen === 'function' ? 'yes' : 'no') +
+        ', webkitSupportsFullscreen=' + (video.webkitSupportsFullscreen ? 'yes' : 'no (until a video is loaded)');
+    }
+  };
+  video.addEventListener('webkitbeginfullscreen', function () { setNativeCaptions(true); PT.emit('videoFullscreen'); });
+  video.addEventListener('webkitendfullscreen', function () { setNativeCaptions(false); PT.emit('videoFullscreen'); });
 
   var airplay = P.airplay = {
     available: false,
@@ -833,7 +939,7 @@
 
   // background: the original keeps playing when the app goes away if "background playback" is on, else it pauses
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden && !pip.active && !PT.settings.backgroundPlay && P.state === 'playing') P.pause();
+    if (document.hidden && !pip.active && !vfs.active && !PT.settings.backgroundPlay && P.state === 'playing') P.pause();
   });
   window.addEventListener('pagehide', function () { reporter.finished(P.currentTime); });
 })(window.PT);

@@ -387,12 +387,13 @@
       if (P.showsStats) this.stats.textContent = P.statsLines().join('\n');
     },
     refreshPip: function () {
-      var P = PT.player, sup = P.pip.supported;
-      this.pipBtn.hidden = !sup;
+      var P = PT.player, st = P.pip.state;
+      // 'blocked' (iOS Home Screen apps): the button stays, dimmed; a tap says why it cannot work
+      this.pipBtn.hidden = st === 'none';
       this.airBtn.hidden = !(P.airplay.supported && P.airplay.available);
-      this.el.classList.toggle('no-pip', !sup);
+      this.el.classList.toggle('no-pip', st === 'none');
       this.el.classList.toggle('no-air', this.airBtn.hidden);
-      this.pipBtn.classList.toggle('dim', !P.current);
+      this.pipBtn.classList.toggle('dim', !P.current || st === 'blocked');
     },
     refreshCaptionIcon: function () {
       var S = PT.subtitles;
@@ -400,9 +401,10 @@
       PT.setIcon(this.capBtn, S.isEnabled ? 'closed_caption' : 'closed_caption_off', 24);
       if (!S.isEnabled) this.sub.hidden = true;
     },
-    setFullscreen: function (on) {
+    /** `on`: the player is laid out as fullscreen (also true for a phone held sideways);  `real`: it was asked for (the icon). */
+    setFullscreen: function (on, real) {
       this.isFullscreen = on;
-      PT.setIcon(this.fsBtn, on ? 'fullscreen_exit' : 'fullscreen', 26);
+      PT.setIcon(this.fsBtn, (real === undefined ? on : real) ? 'fullscreen_exit' : 'fullscreen', 26);
       this.title.hidden = !on;
       this.el.classList.toggle('fullscreen', on);
       this.layoutScrub();

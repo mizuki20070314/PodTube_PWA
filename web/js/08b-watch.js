@@ -388,6 +388,12 @@
 
     PT.on('playerItem', itemChanged);
     PT.on('player', miniState);
+    PT.on('videoFullscreen', function () {
+      // the OS video player opened or closed: after it Safari can leave the page scrolled or the viewport stale
+      if (PT.player.videoFullscreen.active) return;
+      try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
+      [0, 250, 800].forEach(function (ms) { setTimeout(function () { W.layout(); }, ms); });
+    });
     PT.on('theme', function () { /* css variables handle it */ });
     setInterval(tickMini, 500);
     window.addEventListener('resize', function () { W.layout(); });
@@ -506,7 +512,7 @@
     var cs = controls.el.style;
     cs.opacity = String(Math.max(0, 1 - p * 4));
     cs.pointerEvents = p < 0.05 ? '' : 'none';
-    controls.setFullscreen(p === 0 && fs);
+    controls.setFullscreen(p === 0 && fs, p === 0 && (nativeFullscreen || cssFullscreen));
     miniEl.style.width = Wd + 'px';
     miniEl.style.opacity = String(PT.clamp((p - 0.5) * 2, 0, 1));
     miniEl.style.pointerEvents = p > 0.5 ? '' : 'none';
@@ -595,21 +601,52 @@
   };
 
   // fullscreen ----------------------------------------------------------------------------------------------------
-  W.toggleFullscreen = function () {
-    if (W.fullscreenLayout()) { W.exitFullscreen(); return; }
-    var el = root, req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+  /** Can the whole player (with the app's own controls) go fullscreen through the Fullscreen API?  Not on iPhone / iPod touch,
+   *  and not in a Home Screen app on iPad (Safari does not grant it there): iOS then has only its own video player. */
+  function elementFullscreenAvailable() {
+    var el = root || document.documentElement;
+    var req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
     var iphone = /iPhone|iPod/.test(navigator.userAgent);
-    if (req && !iphone && (document.fullscreenEnabled || document.webkitFullscreenEnabled)) {
+    return !!(req && !iphone && (document.fullscreenEnabled || document.webkitFullscreenEnabled) && !(PT.isIOS && PT.standalone));
+  }
+  /** What the fullscreen button does here:  'element' = Fullscreen API on the player;  'video' = the OS video player (iOS: the only
+   *  fullscreen that really covers the screen; it brings its own controls);  'css' = the app fills the browser window. */
+  W.fullscreenRoute = function () {
+    if (elementFullscreenAvailable()) return 'element';
+    if (PT.isIOS && PT.settings.iosFullscreen !== 'app' && PT.player.videoFullscreen.supported) return 'video';
+    return 'css';
+  };
+  /** True where the setting "OS player / in the app" means something (iOS without an element fullscreen). */
+  W.hasFullscreenChoice = function () { return !!(PT.isIOS && !elementFullscreenAvailable()); };
+  W.fullscreenInfo = function () {
+    return W.fullscreenRoute() + ' (element API ' + (elementFullscreenAvailable() ? 'yes' : 'no') + ', ' + PT.player.videoFullscreen.info() + ')';
+  };
+
+  W.toggleFullscreen = function () {
+    var P = PT.player;
+    if (P.videoFullscreen.active) { P.videoFullscreen.exit(); return; }
+    if (nativeFullscreen || cssFullscreen) { W.exitFullscreen(); return; }
+    // (a phone held sideways is laid out like fullscreen but is not one: the button makes it real)
+    var route = W.fullscreenRoute();
+    if (route === 'video' && P.videoFullscreen.enter()) return;
+    if (route === 'element') {
+      var el = root, req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+      // refused (or not allowed here after all): iOS still has its own video player, anything else fills the window
+      var refused = function () {
+        if (PT.isIOS && PT.settings.iosFullscreen !== 'app' && P.videoFullscreen.enter()) return;
+        cssFullscreen = true; W.layout();
+      };
       try {
         var r = req.call(el);
-        if (r && r.catch) r.catch(function () { cssFullscreen = true; W.layout(); });
+        if (r && r.catch) r.catch(refused);
         if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(PT.noop);
-      } catch (e) { cssFullscreen = true; }
+      } catch (e) { refused(); }
     } else cssFullscreen = true;
     W.layout();
   };
   W.exitFullscreen = function () {
     cssFullscreen = false;
+    if (PT.player.videoFullscreen.active) PT.player.videoFullscreen.exit();
     if (document.fullscreenElement || document.webkitFullscreenElement) {
       try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) { /* ignore */ }
       try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) { /* ignore */ }
