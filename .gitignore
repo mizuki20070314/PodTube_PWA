@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.dev-home/
+build/stage/
+build/out/
+build/*.tgz
+tests/shots/
+tests/work/
+node_modules/
+*.secret

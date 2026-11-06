@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.cgi text eol=lf
+*.py text eol=lf
+*.png binary
+*.jpg binary
