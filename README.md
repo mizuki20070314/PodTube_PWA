@@ -89,6 +89,7 @@ javascript:location.href='https://my-dev.sakura.ne.jp/podtube/?url='+encodeURICo
 python tests/devserver.py 8080                 # 手元の疑似サーバー(静的ファイル + 本物の api.cgi)。PT_KEY=… で鍵を有効に
 python tests/api_check.py <api.cgi の URL> [鍵]  # サーバーの通し検査 27 項目(本物の YouTube に当てる。手元でも本番でも可)
 python tests/live_parse.py                     # パーサーを実際の応答に当てる
+PT_KEY=<鍵> python tests/live_gate.py [URL]    # 鍵を持たない新規の訪問者として、鍵の画面・間違い・正しい鍵・#key= のリンクを確かめる(まっさらなヘッドレス Edge)
 node tests/check_syntax.js <acorn.js>          # 全ファイルが ES2018 で読めるか(Safari 12)
 python tests/smoke.py / t_*.py                 # ヘッドレス Edge(DevTools Protocol)で画面を操作して確かめる
 python build/build_web.py                      # build/out/web に書き出す
@@ -105,6 +106,7 @@ python build/build_web.py                      # build/out/web に書き出す
 - サーバーの通し検査 27 項目が、手元と**本番(さくら)の両方**で全て通る(ホーム、続き、検索、候補、動画、コメント、チャンネル、再生リスト、ショート、再生セッション、マスターの書き換え、断片、字幕、音声の選択、鍵の拒否)。
 - 手元のヘッドレス Edge(スマホ・iPad・PC の幅、タッチ操作の模擬)で、ホーム / 検索 / 再生 / コメント / 全画面 / ショート / ダウンロード(保存・オフライン再生・削除)/ マイページ / 設定 / ログイン画面を、実際の YouTube のデータで操作。
 - 本番の URL を実際の Chrome で: 鍵のリンクで開く、ホーム、動画の再生(1080p、画質を 360p に変えて解像度が変わること)、設定のシート、検索と候補、ショート、Service Worker が事前保存を終えること、gzip(JS 336KB → 89KB)。
+- 本番の鍵の画面を、まっさらなブラウザ(新規の訪問者)で 7 項目(鍵の画面が出る、間違いは断られる、正しい鍵でホームが開く、再読み込みで覚えている、`#key=` のリンクで開いて鍵がアドレスから消える)。
 - サーバーの IP から、Google のログイン用の機器コードを取得できること。
 
 **まだ確認していない**(実機・実アカウントが要るもの):
