@@ -404,22 +404,117 @@
   // ---------------------------------------------------------------------------------------------------------------
   // Library ("You" tab)
   // ---------------------------------------------------------------------------------------------------------------
-  /** Signed in, the history screens show the account's watch history; plays of this app are put in front of it. */
+  /**
+   * Signed in, the history screens show the account's watch history, and the plays of this app that the account does not list
+   * (not recorded, or not there yet) are put into it.
+   *
+   * The account's list says in which ORDER things were watched, not when; the plays of this app know their time.  A video that is in
+   * both lists ties the two together (an "anchor").  Between the anchors the account's entries get a time in proportion to their
+   * place, and a play that the account does not list goes where its time falls.  Putting them all in front (what this used to do)
+   * is only right for a play of the last minutes: anything older that the first page does not show (it is further down the account's
+   * list, or it is a Short inside a "Shorts" shelf) jumped to the top out of its place.
+   *
+   * The pages are merged one after the other, each against everything loaded before it, so a play older than what is loaded
+   * appears when the list reaches its time (and at the very end of the list when the account never had it).
+   */
   var HistoryMerge = {
-    days: 30, limit: 40,
-    recent: function () {
-      var cutoff = Date.now() - 30 * 86400000;
-      return PT.store.history.filter(function (e) { return e.watchedAt >= cutoff; }).slice(0, 40).map(function (e) { return e.video; });
+    days: 30,
+    limit: 40,                              // what is shown when the account's list cannot be loaded at all
+    /** With nothing to compare with (no play of this app on the page), plays of the last two hours still go in front. */
+    freshMs: 2 * 3600 * 1000,
+
+    /** Plays of this app, newest first: [{video, t}]. */
+    entries: function () {
+      return PT.store.history.map(function (e) { return { video: e.video, t: e.watchedAt }; });
     },
-    merge: function (local, account) {
-      var listed = {};
-      account.forEach(function (it) { if (it.type === 'video') listed[it.video.id] = true; });
-      return local.filter(function (v) { return !listed[v.id]; }).map(function (v) { return { type: 'video', video: v }; }).concat(account);
+
+    /** The videos of an account item: a video, or the Shorts of a shelf. */
+    videosOf: function (it) {
+      return it.type === 'video' ? [it.video] : (it.type === 'shorts' ? it.videos : []);
     },
-    mergeVideos: function (local, account, limit) {
-      var listed = {};
-      account.forEach(function (v) { listed[v.id] = true; });
-      return local.filter(function (v) { return !listed[v.id]; }).concat(account).slice(0, limit);
+
+    /**
+     * A time for every video of the account's list (`ids`, in its order), from the ones this app played; null when none was.
+     * The order is the true one: a time that rises on the way down was a replay somewhere else, so it only lifts those above it.
+     */
+    estimate: function (ids, byId, now) {
+      var anchors = [], i, n = ids.length;
+      for (i = 0; i < n; i++) { var e = byId[ids[i]]; if (e) anchors.push({ i: i, t: e.t }); }
+      if (!anchors.length) return null;
+      for (i = anchors.length - 2; i >= 0; i--) if (anchors[i].t < anchors[i + 1].t) anchors[i].t = anchors[i + 1].t;
+      for (i = 0; i < anchors.length; i++) if (anchors[i].t > now) anchors[i].t = now;
+      var ctrl = [{ i: -1, t: now }].concat(anchors), last = ctrl[ctrl.length - 1];
+      var pace = Math.max(60000, (now - last.t) / (last.i + 1));          // below the last anchor: the pace of everything above it
+      var est = new Array(n), c = 0;
+      for (i = 0; i < n; i++) {
+        while (c + 1 < ctrl.length && ctrl[c + 1].i <= i) c++;
+        var lo = ctrl[c], hi = ctrl[c + 1];
+        est[i] = hi ? lo.t + (hi.t - lo.t) * (i - lo.i) / (hi.i - lo.i) : lo.t - pace * (i - lo.i);
+      }
+      return est;
+    },
+
+    /**
+     * One merge per list.  `session.page(items, last)` takes the account's items of the next page (`last`: there is no page after it)
+     * and returns them with this app's plays in their places; `session.inserted` holds the ids of those plays.
+     * Options (for tests): `entries`, `now`.
+     */
+    session: function (o) {
+      o = o || {};
+      var now = o.now !== undefined ? o.now : Date.now();
+      var entries = o.entries || HistoryMerge.entries();
+      var byId = {}, i;
+      for (i = 0; i < entries.length; i++) {
+        if (!(entries[i].t > 0)) continue;                                                 // no time, no place
+        if (!byId[entries[i].video.id]) byId[entries[i].video.id] = entries[i];            // the newest play of a video
+      }
+      var cutoff = now - HistoryMerge.days * 86400000;
+      var pending = entries.filter(function (e) { return e.t >= cutoff && byId[e.video.id] === e; });
+      var ids = [], listed = {}, pages = 0;
+      var s = { inserted: {} };
+
+      function asItem(e) { s.inserted[e.video.id] = true; return { type: 'video', video: e.video }; }
+
+      s.page = function (items, last) {
+        var first = pages++ === 0, starts = [];
+        items.forEach(function (it) {
+          var vs = HistoryMerge.videosOf(it);
+          starts.push(vs.length ? ids.length : -1);
+          vs.forEach(function (v) { ids.push(v.id); listed[v.id] = true; });
+        });
+        pending = pending.filter(function (e) { return !listed[e.video.id]; });          // the account lists it after all
+        if (!pending.length) return items;
+        var est = HistoryMerge.estimate(ids, byId, now);
+        var before = items.map(function () { return []; }), keep = [], tail = [];
+        pending.forEach(function (e) {
+          var k = -1, j;
+          if (est) {
+            for (j = 0; j < items.length; j++) if (starts[j] >= 0 && est[starts[j]] < e.t) { k = j; break; }
+            // directly after the video that is newer: in front of the headers that lead to the older one, never above the first header
+            var m = k;
+            while (m > 0 && starts[m - 1] < 0) m--;
+            if (k > 0 && m > 0) k = m;
+          } else if (first && e.t >= now - HistoryMerge.freshMs && items.length) k = 0;
+          if (k >= 0) before[k].push(e); else keep.push(e);
+        });
+        if (last) { tail = keep; keep = []; }                                              // the account's list is over: the rest is not in it
+        pending = keep;
+        var out = [];
+        items.forEach(function (it, j) {
+          before[j].forEach(function (e) { out.push(asItem(e)); });
+          out.push(it);
+        });
+        tail.forEach(function (e) { out.push(asItem(e)); });
+        return out;
+      };
+      return s;
+    },
+
+    /** The videos for a short shelf (the "You" tab): the account's, with this app's plays among them. */
+    shelf: function (accountVideos, limit) {
+      var s = HistoryMerge.session();
+      var out = s.page(accountVideos.map(function (v) { return { type: 'video', video: v }; }), false);
+      return out.map(function (it) { return it.video; }).slice(0, limit);
     }
   };
   PT.historyMerge = HistoryMerge;
@@ -463,7 +558,8 @@
     });
 
     function shelfVideos() {
-      if (signedIn()) return HistoryMerge.mergeVideos(HistoryMerge.recent(), accountHistory, 12);
+      // (until the account's list has arrived, what was played here stands in for it)
+      if (signedIn() && accountHistory.length) return HistoryMerge.shelf(accountHistory, 12);
       return PT.store.history.slice(0, 12).map(function (e) { return e.video; });
     }
     function renderShelf() {
@@ -529,7 +625,7 @@
         if (!signedIn()) return;
         var vids = [];
         (page.items || []).forEach(function (it) { if (it.type === 'video') vids.push(it.video); else if (it.type === 'shorts') vids = vids.concat(it.videos); });
-        accountHistory = vids.slice(0, 12);
+        accountHistory = vids.slice(0, 40);              // more than the 12 shown: the rest tells where this app's plays belong
         renderShelf();
       }, PT.noop);
     }
@@ -620,7 +716,7 @@
   S.accountList = function (kind) {
     var browseId = { history: 'FEhistory', watchLater: 'VLWL', liked: 'VLLL', playlists: 'FEplaylist_aggregation' }[kind];
     var titles = { history: PT.t('library.history'), watchLater: PT.t('library.watchLater'), liked: PT.t('library.liked'), playlists: PT.t('library.playlists') };
-    var localIds = {};
+    var merge = null;                                 // history: this app's plays among the account's entries (see HistoryMerge)
     var feed = new PT.FeedView({
       refresh: true, endpoint: 'tv', avatars: kind === 'history',
       emptyTitle: kind === 'history' ? PT.t('library.emptyHistory') : PT.t('common.empty'),
@@ -631,23 +727,27 @@
       fetchFirst: function () {
         feed.endpoint = 'tv';
         if (!PT.auth.signedIn) return Promise.reject(Object.assign(new Error(PT.t('account.signInRequired')), { code: 'auth' }));
-        // history: what was played in this app goes in front (YouTube's own history may not list it yet)
-        var local = kind === 'history' ? HistoryMerge.recent() : [];
+        merge = kind === 'history' ? HistoryMerge.session() : null;
         return PT.api.post('acct/browse', { browseId: browseId }, { auth: true }).then(function (page) {
-          if (!local.length) return page;
-          localIds = {};
-          local.forEach(function (v) { localIds[v.id] = true; });
-          page.items = HistoryMerge.merge(local, page.items || []);
+          if (merge) page.items = merge.page(page.items || [], !page.continuation);
           return page;
         }, function (e) {
-          if (local.length && e.code !== 'auth') { localIds = {}; local.forEach(function (v) { localIds[v.id] = true; }); return { items: HistoryMerge.merge(local, []) }; }
+          // the account's list could not be loaded: what was played here is better than nothing
+          if (merge && e.code !== 'auth') return { items: merge.page([], true).slice(0, HistoryMerge.limit) };
           throw e;
+        });
+      },
+      // the next pages of the account's list: this app's plays that belong between them come in as the list reaches their time
+      fetchMore: function (token, endpoint) {
+        return PT.api.continuation(token, endpoint).then(function (page) {
+          if (merge) page.items = merge.page(page.items || [], !page.continuation);
+          return page;
         });
       },
       extraActions: function (v) {
         if (kind === 'watchLater') return [{ title: PT.t('video.removeWatchLater'), icon: 'delete', handler: function () { PT.account.setWatchLater(v, false); feed.removeVideo(v.id); } }];
         if (kind === 'liked') return [{ title: PT.t('video.unlike'), icon: 'delete', handler: function () { PT.account.setLike(v, 'none'); feed.removeVideo(v.id); } }];
-        if (kind === 'history' && localIds[v.id]) return [{ title: PT.t('video.notInterested'), icon: 'delete', handler: function () { PT.store.removeHistory(v.id); feed.removeVideo(v.id); } }];
+        if (kind === 'history' && merge && merge.inserted[v.id]) return [{ title: PT.t('video.notInterested'), icon: 'delete', handler: function () { PT.store.removeHistory(v.id); feed.removeVideo(v.id); } }];
         return [];
       }
     });
