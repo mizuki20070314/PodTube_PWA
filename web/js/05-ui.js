@@ -63,10 +63,22 @@
       }
       entry = PT.hist.push(function (fromPop) { close(fromPop, null); });
       dim.addEventListener('click', function () { close(false, null); });
-      // drag down to dismiss
+      // A list that has a selection (chapters, audio tracks, captions ...) opens with the selected row in view: with 60 chapters the
+      // one that is playing would otherwise be somewhere far below.
+      if (o.reveal) {
+        var cur = list.querySelector('.sheet-chk');
+        if (cur) {
+          var row = cur.parentNode, rr = row.getBoundingClientRect(), lr = list.getBoundingClientRect();
+          list.scrollTop = Math.max(0, list.scrollTop + (rr.top - lr.top) - Math.round((lr.height - rr.height) / 2));
+        }
+      }
+      // drag down to dismiss.  It takes over only for a pull DOWN that starts at the top of the list: a swipe UP there is the list
+      // scrolling, and a handler that preventDefault()s every vertical move would make a long list impossible to scroll by touch.
       PT.drag(panel, {
         axis: 'y',
-        start: function () { return list.scrollTop <= 0; },
+        // (from the title bar the pull works whatever the list is showing)
+        start: function (x, y, e) { return list.scrollTop <= 0 || !(e && e.target && list.contains(e.target)); },
+        begin: function (dx, dy) { return dy > 0; },
         move: function (dx, dy) {
           var d = Math.max(0, dy);
           panel.style.transition = 'none';

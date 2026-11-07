@@ -170,7 +170,7 @@ img { -webkit-user-drag: none; }
 .sheet-panel { position: absolute; left: 0; right: 0; bottom: 0; margin: 0 auto; width: 100%; max-width: 560px; max-height: 70%; display: flex; flex-direction: column;
   background: var(--sheet-bg); border-radius: 16px 16px 0 0; padding-bottom: calc(8px + var(--safe-b)); overflow: hidden; will-change: transform; }
 .sheet-title { flex: none; height: 52px; line-height: 52px; padding: 0 16px; font-size: 16px; font-weight: 700; }
-.sheet-list { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.sheet-list { overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; min-height: 0; }
 .sheet-row { display: flex; align-items: center; width: 100%; min-height: 56px; padding: 0 16px; gap: 20px; }
 .sheet-row:active { background: var(--surface); }
 .sheet-row.destructive { color: var(--red); }

@@ -791,7 +791,7 @@
 
   W.showChapters = function () {
     var P = PT.player, now = PT.chapters.current(P.chapters, P.currentTime);
-    PT.sheet.show({ title: PT.t('player.chapters'), actions: P.chapters.map(function (c) {
+    PT.sheet.show({ title: PT.t('player.chapters'), reveal: true, actions: P.chapters.map(function (c) {
       return { title: c.title, subtitle: PT.fmt.duration(c.start), checked: !!now && c.start === now.start, handler: function () { P.seek(c.start); } };
     }) });
   };
@@ -803,7 +803,7 @@
     P.audioOptions().forEach(function (o) {
       acts.push({ title: o.title, checked: !auto && o.isSelected, handler: function () { P.selectAudio(o); } });
     });
-    PT.sheet.show({ title: PT.t('player.audio'), actions: acts });
+    PT.sheet.show({ title: PT.t('player.audio'), reveal: true, actions: acts });
   };
 
   W.showQuality = function () {
@@ -811,14 +811,14 @@
     var options = [0, 1080, 720, 480, 360, 240, 144];
     var m = P.info && P.info.maxHeight;
     if (m > 0) options = options.filter(function (x) { return x === 0 || x <= Math.max(m, 144); });
-    PT.sheet.show({ title: PT.t('player.quality'), actions: options.map(function (x) {
+    PT.sheet.show({ title: PT.t('player.quality'), reveal: true, actions: options.map(function (x) {
       return { title: qualityLabel(x), checked: x === P.maxHeight, handler: function () { P.setMaxHeight(x); } };
     }) });
   };
 
   W.showSpeed = function () {
     var P = PT.player;
-    PT.sheet.show({ title: PT.t('player.speed'), actions: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(function (s) {
+    PT.sheet.show({ title: PT.t('player.speed'), reveal: true, actions: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(function (s) {
       return { title: s === 1 ? PT.t('player.normal') : s + 'x', checked: s === P.speed, handler: function () { P.setSpeed(s); } };
     }) });
   };
@@ -829,7 +829,7 @@
     S.tracks.forEach(function (t) {
       acts.push({ title: t.name, checked: !!S.current && S.current.i === t.i, handler: function () { S.select(t); } });
     });
-    PT.sheet.show({ title: PT.t('player.captions'), actions: acts });
+    PT.sheet.show({ title: PT.t('player.captions'), reveal: true, actions: acts });
   };
 
   W.showSleep = function () {

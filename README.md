@@ -95,6 +95,7 @@ PT_KEY=<鍵> python tests/live_gate.py [URL]    # 鍵を持たない新規の訪
 node tests/check_syntax.js <acorn.js>          # 全ファイルが ES2018 で読めるか(Safari 12)
 python tests/smoke.py / t_*.py                 # ヘッドレス Edge(DevTools Protocol)で画面を操作して確かめる
 python tests/t_ios.py [URL]                    # iOS の全画面ボタンと PiP の振り分け(WebKit だけの API を模擬して 47 項目)
+python tests/t_sheet.py [URL]                  # 下から出るシート(チャプター 60 件など)が指でスクロールでき、引き下げて閉じられること(16 項目)
 python build/build_web.py                      # build/out/web に書き出す
 ```
 

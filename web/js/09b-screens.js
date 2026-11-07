@@ -220,7 +220,7 @@
               { title: 'English', checked: set.uiLanguage === 'en', handler: function () { set.uiLanguage = 'en'; } }] });
           } },
           { choice: PT.t('settings.region'), value: regionText(), action: function () {
-            PT.sheet.show({ title: PT.t('settings.region'), actions: set.regions.map(function (r) {
+            PT.sheet.show({ title: PT.t('settings.region'), reveal: true, actions: set.regions.map(function (r) {
               return { title: r[1], checked: r[0] === set.region(), handler: function () { set.contentRegion = r[0]; } };
             }) });
           } }
