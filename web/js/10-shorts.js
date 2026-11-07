@@ -53,10 +53,14 @@
       if (p && p.catch) p.catch(function () { if (items[current]) items[current].setPaused(true); });
     }
 
+    var refused = {};                       // Shorts that YouTube would not hand to the server (HTTP 429 `botcheck`)
     function loadInfo(id) {
       var i = infos[id];
       if (i && Date.now() - i.t < 3600000) return Promise.resolve(i.v);
-      return PT.api.play(id).then(function (info) { infos[id] = { v: info, t: Date.now() }; return info; }, function () { return null; });
+      return PT.api.play(id).then(function (info) { infos[id] = { v: info, t: Date.now() }; delete refused[id]; return info; }, function (e) {
+        if (e && e.code === 'botcheck') refused[id] = true;
+        return null;
+      });
     }
 
     function loadDetails(v) {
@@ -89,7 +93,11 @@
       it.setLoading(true); it.setPaused(false); it.showPoster(true);
       loadDetails(v);
       loadInfo(v.id).then(function (info) {
-        if (g !== gen || current !== index || !info) { if (current === index && !info) it.setLoading(false); return; }
+        if (g !== gen || current !== index || !info) {
+          if (current === index && !info) { it.setLoading(false); it.setNotice(!!refused[v.id], v.id); }
+          return;
+        }
+        it.setNotice(false, v.id);
         if (!setSource(info)) { it.setLoading(false); return; }
         if (active && !pausedByUser) playShort();
         waitForFirstFrame(index, g);
@@ -141,7 +149,11 @@
       var pauseIcon = h('div', { class: 'sh-pause', hidden: true, html: PT.iconSvg('play_arrow', 64) });
       var progress = h('div', { class: 'sh-progress' });
       var videoSlot = h('div', { class: 'sh-videoslot' });
-      var card = h('div', { class: 'short-card' }, poster, videoSlot, h('div', { class: 'sh-grad' }), pauseIcon,
+      // when YouTube refuses the server's IP the Short cannot play here: say so, and offer YouTube itself (this device's connection)
+      var noticeLink = h('a', { class: 'sh-notice-open', target: '_blank', rel: 'noopener' });
+      var noticeText = h('div', { class: 'sh-notice-text' });
+      var notice = h('div', { class: 'sh-notice', hidden: true }, noticeText, noticeLink);
+      var card = h('div', { class: 'short-card' }, poster, videoSlot, h('div', { class: 'sh-grad' }), pauseIcon, notice,
         h('div', { class: 'sh-actions' }, h('div', { class: 'sh-actgroup' }, likeBtn, likeLabel), h('div', { class: 'sh-actgroup' }, cmBtn, cmLabel), shareBtn, moreBtn),
         h('div', { class: 'sh-bottom' }, h('div', { class: 'sh-row' }, avatar, chName, subBtn), titleEl), spinner, progress);
       var root = h('div', { class: 'short' }, card);
@@ -167,13 +179,20 @@
         attach: function (vid) { videoSlot.appendChild(vid); },
         detach: function () { if (video.parentNode === videoSlot) videoSlot.removeChild(video); progress.style.width = '0'; pauseIcon.hidden = true; spinner.hidden = true; poster.style.visibility = ''; },
         setLoading: function (on) { spinner.hidden = !on; },
+        setNotice: function (on, id) {
+          notice.hidden = !on;
+          if (!on) return;
+          noticeText.textContent = PT.t('embed.title');
+          noticeLink.textContent = PT.t('embed.openYouTube');
+          noticeLink.href = 'https://www.youtube.com/shorts/' + encodeURIComponent(id);
+        },
         setPaused: function (p) { pauseIcon.hidden = !p; },
         setProgress: function (f) { progress.style.width = (PT.clamp(f, 0, 1) * 100) + '%'; },
         showPoster: function (on) { poster.style.visibility = on ? '' : 'hidden'; }
       };
       item.configure(v, entries[v.id]);
       card.addEventListener('click', function (e) {
-        if (e.target.closest && e.target.closest('button, .avatar, .sh-channel')) return;
+        if (e.target.closest && e.target.closest('button, a, .avatar, .sh-channel')) return;
         if (index !== current) return;
         if (!video.paused) { video.pause(); pausedByUser = true; item.setPaused(true); }
         else { pausedByUser = false; playShort(); item.setPaused(false); }

@@ -216,11 +216,22 @@
   var stalls = 0, bytesLoaded = 0, primed = false, sleepTimer = 0;
   var scrubGen = 0, scrubResume = false, scrubTarget = null, scrubFine = false, scrubBusy = false, scrubbing = false;
   var storyboardCache = null;
+  // YouTube's embedded player, while it is the engine (06b-embed.js): used when YouTube refuses the server's IP (HTTP 429 `botcheck`).
+  // Once the server was refused, new videos go straight to the embed for a few minutes instead of asking the server again.
+  var embedCtl = null, embedTimer = 0;
+  var RESTRICTED_MS = 5 * 60 * 1000;
+  var restrictedUntil = +PT.ls.get('restrictedUntil', 0) || 0;
+  function restricted() { return Date.now() < restrictedUntil; }
+  function setRestricted(on) {
+    restrictedUntil = on ? Date.now() + RESTRICTED_MS : 0;
+    PT.ls.set('restrictedUntil', restrictedUntil);
+  }
 
   var P = PT.player = {
     video: video,
     state: 'idle',            // idle | loading | playing | paused | buffering | ended | failed
     current: null, info: null, errorMessage: null,
+    restricted: false,        // this video was refused to the server: the embedded player is (or was) used for it
     queue: [], queueIndex: -1, playlistId: null, upNext: [], chapters: [],
     loops: false, speed: PT.settings.playbackSpeed, maxHeight: PT.settings.maxQuality, showsStats: false,
     sleepEndsAt: 0, sleepAtEnd: false,
@@ -236,9 +247,20 @@
   }
 
   // derived values ------------------------------------------------------------------------------------------------
-  Object.defineProperty(P, 'currentTime', { get: function () { var t = video.currentTime; return isFinite(t) ? Math.max(0, t) : 0; } });
+  Object.defineProperty(P, 'embedActive', { get: function () { return engine === 'embed' && !!embedCtl; } });
+  Object.defineProperty(P, 'currentTime', {
+    get: function () {
+      if (engine === 'embed') return embedCtl ? embedCtl.time() : 0;
+      var t = video.currentTime;
+      return isFinite(t) ? Math.max(0, t) : 0;
+    }
+  });
   Object.defineProperty(P, 'duration', {
     get: function () {
+      if (engine === 'embed') {
+        var ed = embedCtl ? embedCtl.duration() : 0;
+        return ed > 0 ? ed : ((P.info && P.info.duration) || 0);
+      }
       var d = video.duration;
       if (isFinite(d) && d > 0) return d;
       if (P.info && P.info.duration > 0) return P.info.duration;
@@ -248,6 +270,7 @@
   Object.defineProperty(P, 'isLive', { get: function () { return !!(P.info && P.info.isLive); } });
   Object.defineProperty(P, 'bufferedEnd', {
     get: function () {
+      if (engine === 'embed') return 0;
       var t = video.currentTime, b = video.buffered;
       for (var i = 0; i < b.length; i++) if (t >= b.start(i) - 0.5 && t <= b.end(i)) return b.end(i);
       return b.length ? b.end(b.length - 1) : 0;
@@ -256,6 +279,7 @@
   Object.defineProperty(P, 'sourceName', {
     get: function () {
       if (!candidates.length) return '-';
+      if (candidates[candidateIndex] === 'embed') return 'YouTube embed';
       if (candidates[candidateIndex] === 'prog') return 'progressive';
       if (candidates[candidateIndex] === 'offline') return 'download';
       return engine === 'hlsjs' ? 'HLS (hls.js)' : 'HLS (native)';
@@ -319,7 +343,7 @@
     var g = ++gen;
     cancelScrub();
     if (!P.current || P.current.id !== v.id) P.chapters = [];
-    P.current = v; P.info = null; P.errorMessage = null;
+    P.current = v; P.info = null; P.errorMessage = null; P.restricted = false;
     candidates = []; candidateIndex = 0; lastError = '';
     wantsPlay = true; ready = false; pendingSeek = null;
     netRetries = mediaRetries = sessionRetries = 0; stalls = 0; bytesLoaded = 0;
@@ -336,8 +360,11 @@
       startCandidate(g);
       return;
     }
+    // YouTube refused the server lately: do not ask it again for a few minutes, let this device's own connection play it
+    if (restricted() && PT.settings.embedFallback && PT.embed) { startEmbed(g, v); return; }
     PT.api.play(v.id).then(function (info) {
       if (g !== gen) return;
+      if (restrictedUntil) setRestricted(false);                  // the server is let through again
       P.info = info;
       candidates = [];
       if (info.hls) candidates.push('hls');
@@ -350,13 +377,68 @@
       startCandidate(g);
     }, function (err) {
       if (g !== gen) return;
-      fail(err && err.code === 'botcheck' ? PT.t('video.botCheck') : (err && err.message) || PT.t('video.unavailable'));
+      if (err && err.code === 'botcheck') {
+        setRestricted(true);
+        if (PT.settings.embedFallback && PT.embed) { startEmbed(g, v); return; }
+        P.restricted = true;
+        fail(PT.t('video.botCheck'));
+        return;
+      }
+      fail((err && err.message) || PT.t('video.unavailable'));
     });
   };
 
   function fail(message) {
     P.errorMessage = message;
     setState('failed');
+  }
+
+  /**
+   * The server cannot get streams for this video (YouTube answers its IP with a bot check): play it in YouTube's own embedded
+   * player, which goes out over this device's connection.  The player follows the embed's state; the controls come from YouTube.
+   */
+  function startEmbed(g, v) {
+    P.restricted = true;
+    engine = 'embed';
+    P.info = { videoId: v.id, title: v.title || '', author: v.channelName || '', duration: 0, isLive: false, hls: false, embed: true,
+      sid: '', captions: [], audioTracks: [], maxHeight: 0, heights: [], storyboardSpec: '' };
+    candidates = ['embed']; candidateIndex = 0;
+    Sub.setTracks([], '');
+    var startAt = PT.store.resumePosition(v.id) || 0, logged = false;
+    PT.emit('playerItem');
+    embedCtl = PT.embed.open(v.id, {
+      start: startAt,
+      onState: function (code) {
+        if (g !== gen) return;
+        var E = PT.embed;
+        if (code === E.PLAYING) {
+          ready = true;
+          if (!logged) { logged = true; PT.store.addHistory(v, startAt, 0); }
+          setState('playing');
+        } else if (code === E.PAUSED) {
+          if (P.state !== 'ended') setState('paused');
+        } else if (code === E.BUFFERING) {
+          if (ready && P.state !== 'paused') setState('buffering');
+        } else if (code === E.ENDED) {
+          itemEnded(g);
+        }
+      },
+      onError: function (code) {
+        if (g !== gen) return;
+        destroyEngine();
+        fail(PT.embed.notEmbeddable(code) ? PT.t('embed.disabled') : (code === 100 ? PT.t('video.unavailable') : PT.t('embed.failed')));
+      }
+    });
+    // the embed has no events for the clock: once a second, the length and (every five seconds) where the viewer is
+    embedTimer = setInterval(function () {
+      if (g !== gen || !embedCtl) return;
+      var d = embedCtl.duration();
+      if (d > 0 && P.info && P.info.duration !== d) { P.info.duration = d; PT.emit('playerItem'); }
+      if (P.state === 'playing' || P.state === 'paused') {
+        var now = Date.now();
+        if (now - lastSave > 5000) { lastSave = now; PT.store.updateProgress(v.id, embedCtl.time(), d); }
+      }
+    }, 1000);
   }
 
   function masterUrl(info) {
@@ -389,6 +471,8 @@
   // engine --------------------------------------------------------------------------------------------------------
   function destroyEngine() {
     if (hls) { try { hls.destroy(); } catch (e) { /* ignore */ } hls = null; }
+    if (embedCtl) { try { embedCtl.destroy(); } catch (e) { /* ignore */ } embedCtl = null; }
+    clearInterval(embedTimer); embedTimer = 0;
     engine = '';
   }
   function teardown() {
@@ -529,7 +613,11 @@
   function itemEnded(g) {
     if (g !== gen || !P.current) return;
     PT.store.updateProgress(P.current.id, 0, P.duration);
-    if (P.loops) { video.currentTime = 0; P.resume(); return; }
+    if (P.loops) {
+      if (engine === 'embed') { if (embedCtl) embedCtl.seek(0); } else video.currentTime = 0;
+      P.resume();
+      return;
+    }
     reporter.finished(P.duration);
     setState('ended');
     if (P.sleepAtEnd) { P.sleepAtEnd = false; PT.emit('player'); return; }
@@ -539,6 +627,13 @@
   // transport ------------------------------------------------------------------------------------------------------
   P.resume = function () {
     wantsPlay = true;
+    if (engine === 'embed') {
+      if (embedCtl) {
+        if (P.state === 'ended') { setState('paused'); embedCtl.seek(0); }
+        embedCtl.play();
+      }
+      return;
+    }
     if (P.state === 'ended') { setState('paused'); try { video.currentTime = 0; } catch (e) { /* ignore */ } }
     video.playbackRate = P.speed;
     var p = video.play();
@@ -546,9 +641,19 @@
       if (e && e.name === 'NotAllowedError') { wantsPlay = false; if (P.state !== 'failed') setState('paused'); }
     });
   };
-  P.pause = function () { wantsPlay = false; scrubResume = false; video.pause(); };
-  P.toggle = function () { if (video.paused || P.state === 'ended') P.resume(); else P.pause(); };
-  P.seek = function (t) { try { video.currentTime = Math.max(0, t); } catch (e) { /* ignore */ } };
+  P.pause = function () {
+    wantsPlay = false; scrubResume = false;
+    if (engine === 'embed') { if (embedCtl) embedCtl.pause(); return; }
+    video.pause();
+  };
+  P.toggle = function () {
+    if (engine === 'embed') { if (P.state === 'playing' || P.state === 'buffering') P.pause(); else P.resume(); return; }
+    if (video.paused || P.state === 'ended') P.resume(); else P.pause();
+  };
+  P.seek = function (t) {
+    if (engine === 'embed') { if (embedCtl) embedCtl.seek(t); return; }
+    try { video.currentTime = Math.max(0, t); } catch (e) { /* ignore */ }
+  };
   P.skip = function (d) {
     var t = P.currentTime + d;
     if (P.duration > 0) t = Math.min(t, P.duration - 0.5);
@@ -651,6 +756,7 @@
 
   P.retry = function () {
     if (!P.current) return;
+    setRestricted(false);                      // a retry asks the server again
     P.play(P.current, P.queue.length ? P.queue : null, P.playlistId);
   };
 
@@ -673,6 +779,7 @@
     P.speed = s;
     video.defaultPlaybackRate = s;
     video.playbackRate = s;
+    if (engine === 'embed' && embedCtl) embedCtl.setSpeed(s);
     PT.emit('player');
   };
 

@@ -342,6 +342,7 @@
     video: null, info: null, firstComments: null, playlistId: null
   };
   var root, appEl, tabbarEl, playerHost, controls, header, related, body, mainEl, sideEl, miniEl, commentsHost, upNextHeader;
+  var embedLayer, embedBar, embedTitle, embedNote, embedOpen;
   var miniTitle, miniChannel, miniPlay, miniProgress, panel = null, panelHist = null, expandHist = null;
   var cancelAnim = null, cssFullscreen = false, nativeFullscreen = false, split = false, wideHeader = false;
 
@@ -354,9 +355,22 @@
     controls.onSettings = function () { W.showSettings(); };
     controls.onCaptions = function () { W.showCaptions(); };
     PT.player.video.classList.add('pvideo');
-    playerHost = h('div', { class: 'w-player' }, PT.player.video, controls.el);
+    // YouTube's embedded player (see 06b-embed.js) sits on top of the video and the controls when the server cannot get the streams;
+    // the small chevron on it is the way back to the mini player, because the embed's own surface swallows every touch
+    embedLayer = PT.embed.layerElement();
+    PT.embed.layer = embedLayer;
+    var embedCollapse = PT.iconButton('keyboard_arrow_down', 30, 'embed-collapse', 'minimize');
+    embedCollapse.addEventListener('click', function () { W.setMinimized(true, true); });
+    embedLayer.appendChild(embedCollapse);
+    playerHost = h('div', { class: 'w-player' }, PT.player.video, controls.el, embedLayer);
 
     header = new Header();
+    // the note under the player: why the embedded player is used, and the way out to YouTube itself
+    embedTitle = h('div', { class: 'eb-title' });
+    embedNote = h('div', { class: 'eb-note' });
+    embedOpen = h('a', { class: 'eb-open', target: '_blank', rel: 'noopener' });
+    embedBar = h('div', { class: 'embed-bar', hidden: true }, embedTitle, embedNote, embedOpen);
+    header.el.insertBefore(embedBar, header.el.firstChild);
     header.onChannel = function () { var v = header.video; if (v) PT.router.openChannel(v.channelId, v.channelName); };
     header.onOpenComments = function () { W.openComments(); };
     upNextHeader = PT.upNextRow();
@@ -388,6 +402,9 @@
 
     PT.on('playerItem', itemChanged);
     PT.on('player', miniState);
+    PT.on('playerItem', syncEmbed);
+    PT.on('player', syncEmbed);
+    PT.on('settings', syncEmbed);
     PT.on('videoFullscreen', function () {
       // the OS video player opened or closed: after it Safari can leave the page scrolled or the viewport stale
       if (PT.player.videoFullscreen.active) return;
@@ -512,6 +529,7 @@
     var cs = controls.el.style;
     cs.opacity = String(Math.max(0, 1 - p * 4));
     cs.pointerEvents = p < 0.05 ? '' : 'none';
+    embedLayer.style.pointerEvents = p < 0.05 ? '' : 'none';             // a tap on the mini player opens it, not the embed inside
     controls.setFullscreen(p === 0 && fs, p === 0 && (nativeFullscreen || cssFullscreen));
     miniEl.style.width = Wd + 'px';
     miniEl.style.opacity = String(PT.clamp((p - 0.5) * 2, 0, 1));
@@ -519,6 +537,21 @@
     root.classList.toggle('minimized', p > 0.5);
     controls.layoutScrub();
   };
+
+  /** The embedded player (when the server is refused by YouTube) replaces the video and the controls; the note says why. */
+  function syncEmbed() {
+    var P = PT.player, on = P.embedActive;
+    embedLayer.hidden = !on;
+    controls.el.classList.toggle('embedding', on);
+    var show = !!(P.restricted && P.current);
+    embedBar.hidden = !show;
+    if (!show) return;
+    embedTitle.textContent = PT.t('embed.title');
+    embedNote.textContent = on ? PT.t('embed.note') : '';
+    embedNote.hidden = !on;
+    embedOpen.textContent = PT.t('embed.openYouTube');
+    embedOpen.href = 'https://www.youtube.com/watch?v=' + encodeURIComponent(P.current.id);
+  }
 
   /** Where the details and the related list sit: one column, or (wide screens held sideways) two panes. */
   function arrange() {

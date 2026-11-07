@@ -229,6 +229,8 @@
           { toggle: PT.t('settings.autoplay'), get: function () { return set.autoplay; }, set: function (v) { set.autoplay = v; PT.emit('autoplay'); } },
           { toggle: PT.t('settings.backgroundPlay'), get: function () { return set.backgroundPlay; }, set: function (v) { set.backgroundPlay = v; } },
           { toggle: PT.t('settings.captionsAlways'), get: function () { return set.captionsAlways; }, set: function (v) { set.captionsAlways = v; } },
+          { toggle: PT.t('settings.embedFallback'), get: function () { return set.embedFallback; }, set: function (v) { set.embedFallback = v; } },
+          { note: PT.t('settings.embedFallbackHint') },
           PT.watch && PT.watch.hasFullscreenChoice() ? { choice: PT.t('settings.fullscreen'), value: set.iosFullscreen === 'app' ? PT.t('settings.fullscreenAppShort') : PT.t('settings.fullscreenOSShort'), action: function () {
             PT.sheet.show({ title: PT.t('settings.fullscreen'), actions: [
               { title: PT.t('settings.fullscreenOS'), checked: set.iosFullscreen !== 'app', handler: function () { set.iosFullscreen = 'native'; render(); } },

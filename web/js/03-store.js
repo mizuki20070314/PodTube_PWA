@@ -13,6 +13,7 @@
     captionsAlways: false,
     maxQuality: 0,            // 0 = automatic, else the maximum height in pixels
     playbackSpeed: 1,
+    embedFallback: true,      // when YouTube refuses the server's IP: play in YouTube's embedded player over this device's connection
     iosFullscreen: 'native',  // iOS without an element fullscreen: 'native' = the OS video player (real fullscreen), 'app' = fill the window
     preferredAudio: '',       // '' automatic, 'original', or a language tag
     uiLanguage: 'auto',       // 'auto' | 'ja' | 'en'

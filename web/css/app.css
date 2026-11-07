@@ -484,3 +484,22 @@ img { -webkit-user-drag: none; }
 .filmstrip.show { opacity: 1; }
 .fs-tile { position: absolute; top: 0; height: 100%; background-color: #1f1f1f; background-repeat: no-repeat; }
 .fs-playhead { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; z-index: 1; }
+
+/* ---- YouTube's own embedded player, used when the server is refused (06b-embed.js) ------------------------------------- */
+.embed-layer { position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 6; background: #000; }
+.embed-layer[hidden] { display: none; }
+.embed-layer iframe, .embed-mount { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border: 0; }
+.embed-collapse { position: absolute; left: 4px; top: 2px; z-index: 7; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+  color: #fff; border-radius: 50%; background: rgba(0, 0, 0, .5); }
+.ctl.embedding { display: none; }
+.embed-bar { flex: none; margin: 4px 12px 12px; padding: 12px 14px; border-radius: 12px; background: var(--surface); color: var(--text); }
+.embed-bar[hidden] { display: none; }
+.embed-bar .eb-title { font-size: 14px; font-weight: 600; line-height: 1.45; }
+.embed-bar .eb-note { margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--secondary); }
+.embed-bar .eb-open { display: inline-block; margin-top: 10px; padding: 8px 16px; border-radius: 18px; background: var(--chip-sel); color: var(--chip-sel-text);
+  font-size: 14px; font-weight: 600; text-decoration: none; }
+.sh-notice { position: absolute; left: 24px; right: 72px; top: 50%; transform: translateY(-50%); z-index: 3; padding: 16px; border-radius: 14px; text-align: center;
+  background: rgba(0, 0, 0, .72); color: #fff; }
+.sh-notice[hidden] { display: none; }
+.sh-notice .sh-notice-text { font-size: 14px; font-weight: 600; line-height: 1.5; }
+.sh-notice .sh-notice-open { display: inline-block; margin-top: 12px; padding: 8px 18px; border-radius: 18px; background: #fff; color: #0f0f0f; font-size: 14px; font-weight: 600; text-decoration: none; }
