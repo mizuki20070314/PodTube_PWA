@@ -7,6 +7,7 @@
 > 非公式です。YouTube / Google とは無関係です。内部 API を使うため、YouTube 側の変更で突然動かなくなることがあります。
 
 - 公開先: <https://my-dev.sakura.ne.jp/podtube/>(さくらのレンタルサーバ、`~/www/podtube/`)
+- **M17(Rockchip RK3126C の Linux ハンドヘルド)版クライアント**: [`m17/`](m17/)(LÖVE + ffmpeg + ALSA。このサーバーの `api.cgi` をそのまま使います。音ズレの自動修復・オフライン再生つき。作り方と使い方は [`m17/README.md`](m17/README.md))
 - アクセスキー: サーバーの `~/.podtube/config.json` の `access_key`。**初回だけ** `https://my-dev.sakura.ne.jp/podtube/#key=<キー>` を開くと、端末に覚えます(アドレスの `#key=…` はすぐ消えます)。
 - ホーム画面に追加: iPhone / iPad は Safari の共有 → 「ホーム画面に追加」、Android の Chrome は「アプリをインストール」、PC の Chrome / Edge はアドレスバーのインストールボタン。
 

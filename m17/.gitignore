@@ -1,0 +1,6 @@
+secrets/
+shots/
+logs/
+*.pyc
+__pycache__/
+tools/avsync/out/
